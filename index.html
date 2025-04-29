@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wechselspannung Wiederherstellen</title>
+    <!-- Plotly.js für die Visualisierung -->
+    <script src='https://cdn.plot.ly/plotly-latest.min.js'></script>
+    <style>
+        body {
+            font-family: sans-serif;
+            line-height: 1.6;
+            margin: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        h1, h2 {
+            color: #0056b3;
+        }
+        #plot {
+            width: 100%;
+            max-width: 800px;
+            height: 400px;
+            margin: 20px auto;
+            border: 1px solid #ccc;
+            background-color: #fff;
+        }
+        #controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+            padding: 15px;
+            background-color: #e9e9e9;
+            border-radius: 5px;
+        }
+        #controls div {
+            display: flex;
+            flex-direction: column;
+        }
+        #controls label {
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        #controls input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+        }
+        #controls span {
+            font-style: italic;
+            color: #0056b3;
+            font-weight: bold;
+            min-width: 40px; /* Platz für Werte */
+            text-align: right;
+            padding-left: 5px;
+        }
+        #quiz-area {
+            margin-top: 30px;
+            padding: 20px;
+            background-color: #fff;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        .question-container {
+            margin-bottom: 20px;
+        }
+        .question-container p {
+            font-weight: bold;
+        }
+        .options label {
+            display: block;
+            margin-bottom: 8px;
+            cursor: pointer;
+        }
+        .options input[type="radio"] {
+            margin-right: 8px;
+        }
+        .feedback {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .feedback.correct {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .feedback.incorrect {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .merksatz {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #e2e3e5;
+            border-left: 5px solid #0056b3;
+        }
+        .prompt {
+            margin-top: 10px;
+            font-style: italic;
+            color: #555;
+        }
+        button {
+            padding: 8px 15px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Rekonstruktion einer Wechselspannung</h1>
+    <p>Ein Techniker hat die Messwerte einer wichtigen sinusförmigen Wechselspannung U(t) verloren. Es ist nur noch die allgemeine Form bekannt: <strong>U(t) = a ⋅ sin(b ⋅ t + c) + d</strong>. Ihre Aufgabe ist es, die ursprüngliche Spannung durch Anpassen der Parameter <strong>a, b, c</strong> und <strong>d</strong> zu rekonstruieren und dabei deren Bedeutung zu lernen.</p>
+    <p>Verändern Sie die Regler und beobachten Sie, wie sich die Kurve im Diagramm ändert. Beantworten Sie anschließend die Fragen, um Ihr Verständnis zu festigen.</p>
+
+    <!-- Plotly Diagramm Container -->
+    <div id="plot"></div>
+
+    <!-- Regler für Parameter -->
+    <div id="controls">
+        <div>
+            <label for="a">Amplitude (a): <span id="a-value">1</span> V</label>
+            <input type="range" id="a" name="a" min="0.1" max="10" value="1" step="0.1">
+        </div>
+        <div>
+            <label for="b">Kreisfrequenz (b): <span id="b-value">1</span> rad/s</label>
+            <input type="range" id="b" name="b" min="0.1" max="10" value="1" step="0.1">
+        </div>
+        <div>
+            <label for="c">Phasenverschiebung (c): <span id="c-value">0</span> rad</label>
+            <input type="range" id="c" name="c" min="-3.14" max="3.14" value="0" step="0.01">
+        </div>
+        <div>
+            <label for="d">Offset / Gleichanteil (d): <span id="d-value">0</span> V</label>
+            <input type="range" id="d" name="d" min="-5" max="5" value="0" step="0.1">
+        </div>
+    </div>
+
+    <!-- Quiz Bereich -->
+    <div id="quiz-area">
+        <h2>Verständnisfragen zur Spannungsform</h2>
+        <div id="quiz-content">
+            <!-- Fragen werden hier dynamisch geladen -->
+        </div>
+    </div>
+
+    <script>
+        // DOM Elemente holen
+        const plotDiv = document.getElementById('plot');
+        const sliderA = document.getElementById('a');
+        const sliderB = document.getElementById('b');
+        const sliderC = document.getElementById('c');
+        const sliderD = document.getElementById('d');
+        const valueA = document.getElementById('a-value');
+        const valueB = document.getElementById('b-value');
+        const valueC = document.getElementById('c-value');
+        const valueD = document.getElementById('d-value');
+        const quizContentDiv = document.getElementById('quiz-content');
+
+        // Quiz Daten
+        const quizData = [
+            {
+                parameter: 'a',
+                question: "Sie haben die Amplitude 'a' angepasst. Welche Auswirkung hat dieser Parameter auf die Wechselspannung?",
+                options: [
+                    "Verändert die Frequenz (wie oft die Spannung pro Sekunde schwingt).",
+                    "Verschiebt die gesamte Spannungskurve auf der Zeitachse (nach links/rechts).",
+                    "Bestimmt die maximale Höhe (Spannungsspitze) der Schwingung um die Mittellage.",
+                    "Verschiebt die gesamte Spannungskurve auf der Spannungsachse (nach oben/unten)."
+                ],
+                correctAnswer: 2, // Index der korrekten Antwort (0-basiert)
+                merksatz: "<strong>Merksatz Amplitude (a):</strong> 'a' ist die Amplitude und bestimmt die maximale Auslenkung der Spannung von ihrer Mittellage (dem Gleichanteil 'd'). Ein größeres 'a' bedeutet höhere positive und tiefere negative Spannungswerte.",
+                prompt: "Sehr gut! Experimentieren Sie nun mit der Kreisfrequenz 'b' und beobachten Sie die Änderungen."
+            },
+            {
+                parameter: 'b',
+                question: "Jetzt ändern Sie die Kreisfrequenz 'b'. Was beschreibt dieser Wert?",
+                options: [
+                    "Den Startpunkt der Schwingung zum Zeitpunkt t=0.",
+                    "Die Höhe der maximalen Spannung.",
+                    "Die Geschwindigkeit der Schwingung (wie schnell sich die Spannung ändert, beeinflusst die Frequenz).",
+                    "Den durchschnittlichen Spannungswert über eine Periode."
+                ],
+                correctAnswer: 2,
+                merksatz: "<strong>Merksatz Kreisfrequenz (b):</strong> 'b' ist die Kreisfrequenz (ω). Sie bestimmt, wie schnell die Schwingung abläuft. Ein größeres 'b' bedeutet eine höhere Frequenz (mehr Schwingungen pro Sekunde). Die Periodendauer T ist 2π/b.",
+                prompt: "Ausgezeichnet! Untersuchen Sie als Nächstes die Phasenverschiebung 'c'."
+            },
+            {
+                parameter: 'c',
+                question: "Der Parameter 'c' ist die Phasenverschiebung. Wie wirkt sie sich auf die Sinuskurve aus?",
+                options: [
+                    "Sie streckt oder staucht die Kurve in der Höhe.",
+                    "Sie verschiebt die gesamte Kurve entlang der Zeitachse (t) nach links oder rechts.",
+                    "Sie ändert die Anzahl der Schwingungen pro Sekunde.",
+                    "Sie hebt oder senkt die gesamte Kurve entlang der Spannungsachse (U)."
+                ],
+                correctAnswer: 1,
+                merksatz: "<strong>Merksatz Phasenverschiebung (c):</strong> 'c' (oft auch φ genannt) bewirkt eine Verschiebung der Kurve entlang der Zeitachse. Ein positives 'c' verschiebt die Kurve nach links, ein negatives 'c' nach rechts (bezogen auf die Grundform sin(b*t)). Es bestimmt den Startpunkt der Schwingung.",
+                prompt: "Korrekt! Zum Schluss betrachten wir den Gleichanteil 'd'."
+            },
+            {
+                parameter: 'd',
+                question: "Zuletzt der Parameter 'd'. Welche Bedeutung hat er für die Wechselspannung?",
+                options: [
+                    "Er bestimmt die Spitzen-Spannung.",
+                    "Er beeinflusst, wie schnell die Spannung schwingt.",
+                    "Er verschiebt die gesamte Spannungskurve nach oben oder unten (Offset).",
+                    "Er verschiebt die Spannungskurve nach links oder rechts."
+                ],
+                correctAnswer: 2,
+                merksatz: "<strong>Merksatz Offset/Gleichanteil (d):</strong> 'd' ist der Gleichspannungsanteil oder Offset. Er verschiebt die gesamte Schwingung entlang der Spannungsachse nach oben (d > 0) oder unten (d < 0). Die Schwingung erfolgt dann um den Wert U = d.",
+                prompt: "Perfekt! Sie haben alle Parameter verstanden und können nun versuchen, eine spezifische Wechselspannung zu rekonstruieren."
+            }
+        ];
+
+        let currentQuestionIndex = 0;
+        let parameters = { a: 1, b: 1, c: 0, d: 0 };
+
+        // Funktion zum Aktualisieren des Plots
+        function updatePlot() {
+            parameters.a = parseFloat(sliderA.value);
+            parameters.b = parseFloat(sliderB.value);
+            parameters.c = parseFloat(sliderC.value);
+            parameters.d = parseFloat(sliderD.value);
+
+            // Werte neben den Reglern aktualisieren
+            valueA.textContent = parameters.a.toFixed(1);
+            valueB.textContent = parameters.b.toFixed(1);
+            valueC.textContent = parameters.c.toFixed(2);
+            valueD.textContent = parameters.d.toFixed(1);
+
+            // Daten für den Plot generieren
+            const t = []; // Zeitachse
+            const U = []; // Spannungsachse
+            const maxTime = Math.max(4 * Math.PI / parameters.b, 10); // Zeitachse an Frequenz anpassen, aber mind. 10s
+            const steps = 200; // Anzahl der Punkte
+
+            for (let i = 0; i <= steps; i++) {
+                const currentTime = (i / steps) * maxTime;
+                t.push(currentTime);
+                U.push(parameters.a * Math.sin(parameters.b * currentTime + parameters.c) + parameters.d);
+            }
+
+            // Plotly Daten und Layout
+            const plotData = [{
+                x: t,
+                y: U,
+                type: 'scatter', // Linien-Diagramm
+                mode: 'lines',
+                line: { color: '#0056b3', width: 2 }
+            }];
+
+            const layout = {
+                title: `Wechselspannung U(t) = ${parameters.a.toFixed(1)} * sin(${parameters.b.toFixed(1)}*t + ${parameters.c.toFixed(2)}) + ${parameters.d.toFixed(1)}`,
+                xaxis: { title: 'Zeit t (s)' },
+                yaxis: { title: 'Spannung U(t) (V)', range: [-15, 15]}, // Fester Y-Bereich für bessere Vergleichbarkeit
+                margin: { l: 50, r: 30, b: 50, t: 50, pad: 4 } // Ränder anpassen
+            };
+
+            // Plotly Plot aktualisieren (oder neu zeichnen, falls noch nicht vorhanden)
+            Plotly.react(plotDiv, plotData, layout);
+        }
+
+        // Funktion zum Anzeigen der aktuellen Frage
+        function displayQuestion(index) {
+            if (index >= quizData.length) {
+                 quizContentDiv.innerHTML = `<p>Alle Fragen beantwortet. Sie haben ein gutes Verständnis für die Parameter der Sinusfunktion!</p>`;
+                 return;
+            }
+
+            const q = quizData[index];
+            let optionsHtml = '';
+            q.options.forEach((option, i) => {
+                optionsHtml += `
+                    <label>
+                        <input type="radio" name="q${index}" value="${i}"> ${option}
+                    </label>
+                `;
+            });
+
+            quizContentDiv.innerHTML = `
+                <div class="question-container" id="q-container-${index}">
+                    <p>${q.question}</p>
+                    <div class="options">${optionsHtml}</div>
+                    <button onclick="checkAnswer(${index})" id="check-btn-${index}">Antwort prüfen</button>
+                    <div class="feedback" id="feedback-${index}" style="display: none;"></div>
+                    <div class="merksatz" id="merksatz-${index}" style="display: none;"></div>
+                    <div class="prompt" id="prompt-${index}" style="display: none;"></div>
+                </div>
+            `;
+        }
+
+        // Funktion zum Überprüfen der Antwort
+        function checkAnswer(index) {
+            const q = quizData[index];
+            const selectedOption = document.querySelector(`input[name="q${index}"]:checked`);
+            const feedbackDiv = document.getElementById(`feedback-${index}`);
+            const merksatzDiv = document.getElementById(`merksatz-${index}`);
+            const promptDiv = document.getElementById(`prompt-${index}`);
+            const checkButton = document.getElementById(`check-btn-${index}`);
+            const radioButtons = document.querySelectorAll(`input[name="q${index}"]`);
+
+            feedbackDiv.style.display = 'block'; // Feedback anzeigen
+
+            if (selectedOption) {
+                const answerValue = parseInt(selectedOption.value);
+                if (answerValue === q.correctAnswer) {
+                    feedbackDiv.textContent = "Richtig!";
+                    feedbackDiv.className = 'feedback correct';
+                    merksatzDiv.innerHTML = q.merksatz;
+                    merksatzDiv.style.display = 'block';
+                    promptDiv.innerHTML = q.prompt;
+                    promptDiv.style.display = 'block';
+                    checkButton.disabled = true; // Button deaktivieren
+                    radioButtons.forEach(rb => rb.disabled = true); // Optionen deaktivieren
+
+                    // Nächste Frage nach kurzer Verzögerung laden (optional) oder sofort
+                    currentQuestionIndex++;
+                     // Nächste Frage sofort laden, wenn es eine gibt
+                    if (currentQuestionIndex < quizData.length) {
+                         displayQuestion(currentQuestionIndex);
+                    } else {
+                         // Hinweis, dass alles geschafft ist (wird bereits in displayQuestion behandelt)
+                         displayQuestion(currentQuestionIndex); // Zeigt Abschlussnachricht
+                    }
+
+                } else {
+                    feedbackDiv.textContent = "Leider falsch. Überlegen Sie noch einmal oder passen Sie den Regler erneut an und beobachten Sie die Auswirkung.";
+                    feedbackDiv.className = 'feedback incorrect';
+                    merksatzDiv.style.display = 'none';
+                    promptDiv.style.display = 'none';
+                }
+            } else {
+                feedbackDiv.textContent = "Bitte wählen Sie eine Antwort aus.";
+                feedbackDiv.className = 'feedback incorrect';
+                merksatzDiv.style.display = 'none';
+                promptDiv.style.display = 'none';
+            }
+        }
+
+
+        // Event Listener für die Slider hinzufügen
+        sliderA.addEventListener('input', updatePlot);
+        sliderB.addEventListener('input', updatePlot);
+        sliderC.addEventListener('input', updatePlot);
+        sliderD.addEventListener('input', updatePlot);
+
+        // Initialisierung
+        window.onload = () => {
+            updatePlot(); // Initialen Plot zeichnen
+            displayQuestion(currentQuestionIndex); // Erste Frage anzeigen
+        };
+
+    </script>
+
+</body>
+</html>
